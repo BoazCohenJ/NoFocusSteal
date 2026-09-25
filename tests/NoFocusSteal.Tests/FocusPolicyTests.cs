@@ -139,6 +139,25 @@ public class FocusPolicyTests
     }
 
     [Fact]
+    public void BogusImeWindowIsBlockedEvenRightAfterAClick()
+    {
+        var s = Steal(lastIntentAgo: 20);
+        s.NextIsBogus = true;
+        Assert.Equal(Verdict.Blocked, Decide(s).Verdict);
+        Assert.Equal(Verdict.WouldBlock, Decide(s, ProtectionMode.LogOnly).Verdict);
+        Assert.Equal(Verdict.Allowed, Decide(s, ProtectionMode.Off).Verdict);
+    }
+
+    [Fact]
+    public void BogusWindowOfTheSameAppIsLeftAlone()
+    {
+        var s = Steal(lastIntentAgo: 20);
+        s.NextIsBogus = true;
+        s.SameProcess = true;
+        Assert.Equal(Verdict.Allowed, Decide(s).Verdict);
+    }
+
+    [Fact]
     public void NoPreviousWindowIsAllowed()
     {
         var s = Steal(lastTypingAgo: 100);

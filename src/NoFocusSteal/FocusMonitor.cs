@@ -131,6 +131,7 @@ internal sealed class FocusMonitor : IDisposable
             EventTime = p.EventTime,
             NextIsOwnProcess = next.ProcessId == _ownPid,
             NextIsSystemUI = next.IsSystemUI,
+            NextIsBogus = next.IsBogus,
             HasPrevious = prev != null,
             PreviousGone = prev != null && WindowInfo.IsGone(prev.Hwnd),
             SameProcess = prev != null && prev.ProcessId == next.ProcessId,
@@ -155,7 +156,8 @@ internal sealed class FocusMonitor : IDisposable
 
         if (decision.Verdict == Verdict.Blocked)
         {
-            if (IsPaused(next.ExeName, p.EventTime))
+            // Bogus windows don't fight back; they get focus once per click, so never back off from them.
+            if (!next.IsBogus && IsPaused(next.ExeName, p.EventTime))
             {
                 entry.Verdict = Verdict.Unsolicited;
                 entry.Note = Join(entry.Note, "(not blocked: this app kept fighting back, paused for a minute)");
@@ -163,7 +165,7 @@ internal sealed class FocusMonitor : IDisposable
             }
             else
             {
-                bool fighting = CountBlock(next.ExeName, p.EventTime);
+                bool fighting = !next.IsBogus && CountBlock(next.ExeName, p.EventTime);
                 if (!TakeFocusBack(prev, next, out bool alreadyBack))
                 {
                     entry.Note = Join(entry.Note,
