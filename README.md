@@ -96,7 +96,7 @@ People have been asking for this for over 15 years, and the answer kept being "n
 - PowerToys, [*Disable focus stealing* (#65)](https://github.com/microsoft/PowerToys/issues/65), open since 2019 with 200+ reactions.
 - Microsoft Q&A, [*How to prevent focus stealing*](https://learn.microsoft.com/en-us/answers/questions/2156085/how-to-prevent-focus-stealing) and [*Apps stealing focus*](https://learn.microsoft.com/en-us/answers/questions/3869634/apps-stealing-focus).
 
-Earlier tools either only log (WindowFocusLogger, focusmonitor) or rely on DLL injection and haven't been updated since 2020 (StayFocused). NoFocusSteal does both jobs without injecting anything.
+Earlier tools either only log (WindowFocusLogger, focusmonitor) or block by injecting a DLL into other apps ([StayFocused](https://github.com/bladeSk/StayFocused), whose last release was in 2020 and whose author moved to Linux in 2022 and stopped active development). NoFocusSteal does both jobs without injecting anything.
 
 ## License
 
