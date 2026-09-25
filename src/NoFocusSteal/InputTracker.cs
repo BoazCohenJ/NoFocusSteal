@@ -16,7 +16,9 @@ internal sealed class InputTracker : NativeWindow, IDisposable
 
     private readonly int[] _intents = new int[HistorySize];
     private readonly int[] _typing = new int[HistorySize];
-    private int _intentCount, _intentNext, _typingCount, _typingNext;
+    private readonly int[] _moves = new int[HistorySize];
+    private int _intentCount, _intentNext, _typingCount, _typingNext, _moveCount, _moveNext;
+    private int _lastMoveRecorded;
     private bool _ctrl, _alt, _win;
     private IntPtr _buffer = Marshal.AllocHGlobal(256);
     private uint _bufferSize = 256;
@@ -52,6 +54,7 @@ internal sealed class InputTracker : NativeWindow, IDisposable
 
     public int? LastIntentAtOrBefore(int time) => LatestAtOrBefore(_intents, _intentCount, time);
     public int? LastTypingAtOrBefore(int time) => LatestAtOrBefore(_typing, _typingCount, time);
+    public int? LastMouseMoveAtOrBefore(int time) => LatestAtOrBefore(_moves, _moveCount, time);
 
     /// <summary>Record input that happened but that Raw Input didn't report (touch, pen), as a deliberate action.</summary>
     public void AddIntent(int time) => Push(_intents, ref _intentNext, ref _intentCount, time);
@@ -109,6 +112,17 @@ internal sealed class InputTracker : NativeWindow, IDisposable
             const ushort anyButtonDown = 0x0001 | 0x0004 | 0x0010 | 0x0040 | 0x0100;
             if ((buttonFlags & anyButtonDown) != 0)
                 Push(_intents, ref _intentNext, ref _intentCount, time);
+
+            // Pointer movement matters when Windows is set to activate the window under the mouse
+            // (X-Mouse / "focus follows mouse"). Mice report hundreds of moves a second, so thin them out.
+            ushort moveFlags = (ushort)Marshal.ReadInt16(_buffer, data);
+            int dx = Marshal.ReadInt32(_buffer, data + 12), dy = Marshal.ReadInt32(_buffer, data + 16);
+            bool moved = dx != 0 || dy != 0 || (moveFlags & 0x01) != 0; // MOUSE_MOVE_ABSOLUTE: tablets, touchpads
+            if (moved && (_moveCount == 0 || FocusPolicy.Elapsed(time, _lastMoveRecorded) >= 30))
+            {
+                Push(_moves, ref _moveNext, ref _moveCount, time);
+                _lastMoveRecorded = time;
+            }
         }
     }
 

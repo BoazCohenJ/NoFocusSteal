@@ -158,6 +158,24 @@ public class FocusPolicyTests
     }
 
     [Fact]
+    public void FocusFollowsMouseIsAllowedEvenWhileTyping()
+    {
+        // X-Mouse users switch windows by pointing at them, often with their hands still on the keys.
+        var s = Steal(lastTypingAgo: 100);
+        s.FollowsMouse = true;
+        Assert.Equal(Verdict.Allowed, Decide(s, ProtectionMode.Strict).Verdict);
+    }
+
+    [Fact]
+    public void FocusFollowsMouseDoesNotExcuseTheImeBug()
+    {
+        var s = Steal(lastIntentAgo: 20);
+        s.FollowsMouse = true;
+        s.NextIsBogus = true;
+        Assert.Equal(Verdict.Blocked, Decide(s).Verdict);
+    }
+
+    [Fact]
     public void NoPreviousWindowIsAllowed()
     {
         var s = Steal(lastTypingAgo: 100);
