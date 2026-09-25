@@ -47,6 +47,9 @@ public sealed class FocusSnapshot
     /// <summary>The new foreground window is one that should never have focus, like the invisible input-method
     /// window a Windows 11 24H2 bug hands focus to after every click.</summary>
     public bool NextIsBogus;
+    /// <summary>Windows' "activate the window under the mouse" setting (X-Mouse) is on, the pointer just moved,
+    /// and the new foreground window is the one under it.</summary>
+    public bool FollowsMouse;
 
     /// <summary>Most recent click, shortcut, Alt/Win/Tab/Enter/Esc press at or before the event, if any.</summary>
     public int? LastIntent;
@@ -100,6 +103,7 @@ public static class FocusPolicy
             return o.Mode == ProtectionMode.LogOnly ? new Decision(Verdict.WouldBlock, bogus) : new Decision(Verdict.Blocked, bogus);
         }
         if (s.Rule == AppRule.Allow) return Allow("app is on your allow list");
+        if (s.FollowsMouse) return Allow("focus follows your mouse (X-Mouse)");
 
         // Typing only counts if it came after your last deliberate action: a click or Alt+Tab followed by
         // silence is a request to switch, while keys typed after it mean you are busy where you are.

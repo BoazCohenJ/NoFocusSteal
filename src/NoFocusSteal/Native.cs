@@ -68,6 +68,28 @@ internal static class Native
     [DllImport("user32.dll")]
     public static extern int GetMessageTime();
 
+    public const uint SPI_GETACTIVEWINDOWTRACKING = 0x1000;
+    public const uint SPI_GETACTIVEWNDTRKTIMEOUT = 0x2002;
+
+    [DllImport("user32.dll", EntryPoint = "SystemParametersInfo")]
+    public static extern bool SystemParametersInfoBool(uint action, uint param, out bool value, uint winIni);
+
+    [DllImport("user32.dll", EntryPoint = "SystemParametersInfo")]
+    public static extern bool SystemParametersInfoUInt(uint action, uint param, out uint value, uint winIni);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT
+    {
+        public int X;
+        public int Y;
+    }
+
+    [DllImport("user32.dll")]
+    public static extern bool GetCursorPos(out POINT point);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr WindowFromPoint(POINT point);
+
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
 

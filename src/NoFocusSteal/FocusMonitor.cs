@@ -139,6 +139,7 @@ internal sealed class FocusMonitor : IDisposable
                                             || prev.RootOwner == next.Hwnd),
             LastIntent = _input.LastIntentAtOrBefore(unchecked(p.EventTime + SettleMs)),
             LastTyping = _input.LastTypingAtOrBefore(p.EventTime),
+            FollowsMouse = FollowsMouse(next, p.EventTime),
             NextProcessStart = next.ProcessStartTick,
             Rule = _settings.RuleFor(next.ExeName),
         };
@@ -188,6 +189,25 @@ internal sealed class FocusMonitor : IDisposable
 
         _log.Add(entry);
         if (entry.Verdict == Verdict.Blocked) Blocked?.Invoke(entry);
+    }
+
+    /// <summary>
+    /// With Windows' "activate a window by hovering over it" (X-Mouse) turned on, pointing at a window is how
+    /// you switch to it. Treat that as yours when the pointer moved shortly before and is over the new window.
+    /// </summary>
+    private bool FollowsMouse(WindowInfo next, int eventTime)
+    {
+        if (!Native.SystemParametersInfoBool(Native.SPI_GETACTIVEWINDOWTRACKING, 0, out bool tracking, 0) || !tracking)
+            return false;
+        Native.SystemParametersInfoUInt(Native.SPI_GETACTIVEWNDTRKTIMEOUT, 0, out uint delay, 0);
+        int? lastMove = _input.LastMouseMoveAtOrBefore(eventTime);
+        if (lastMove == null || FocusPolicy.Elapsed(eventTime, lastMove.Value) > (int)Math.Min(delay, 10000) + 1000)
+            return false;
+        if (!Native.GetCursorPos(out Native.POINT cursor)) return false;
+        IntPtr under = Native.WindowFromPoint(cursor);
+        if (under == IntPtr.Zero) return false;
+        IntPtr root = Native.GetAncestor(under, Native.GA_ROOTOWNER);
+        return root == next.RootOwner || root == next.Hwnd || under == next.Hwnd;
     }
 
     private bool TakeFocusBack(WindowInfo prev, WindowInfo thief, out bool alreadyBack)

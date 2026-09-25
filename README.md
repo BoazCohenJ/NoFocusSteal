@@ -24,6 +24,7 @@ NoFocusSteal is a tiny tray app that puts focus back where you were typing the m
 - **Leaves your own actions alone.** Clicking, Alt+Tab, Win-key shortcuts, closing a window, dialogs of the app you're using and the Start menu all work normally.
 - **Four modes:** *Guard* (default: block only while you type), *Strict* (block anything you didn't ask for), *Log only* (just find the culprit) and *Off*.
 - **Fixes the Windows 11 24H2 "games lose focus on every click" bug.** It always sends focus back when explorer.exe's invisible `MSCTFIME UI` window grabs it.
+- **Works with focus-follows-mouse.** If you use X-Mouse (Windows' "activate a window by hovering over it", or [X-Mouse Controls](https://github.com/joelpurra/xmouse-controls)), pointing at a window still switches to it.
 - **Per-app rules.** Right-click a row to always allow an app, or to block it even when you aren't typing.
 - **Built-in test.** Click **Test it** to watch a window try to steal focus and fail.
 - **Nothing injected.** No DLL injection and no API hooking of other programs, unlike older tools; see [how it works](#how-it-decides).
@@ -47,6 +48,7 @@ NoFocusSteal watches for foreground-window changes (`SetWinEventHook`) and watch
 | The previous window was closed, minimized or hidden | ✅ allowed: Windows has to put focus somewhere |
 | Same app (a dialog, a new tab or window) | ✅ allowed |
 | Start menu, search, Alt+Tab, lock screen, UAC | ✅ allowed |
+| X-Mouse is on and you just pointed at the window | ✅ allowed |
 | Another app grabs focus less than 1.5 s after you typed | ⛔ **blocked**: focus returns to your window and the app's taskbar button flashes |
 | Another app grabs focus while you're idle | ⚠️ *Unsolicited*: allowed and highlighted in the log (blocked in **Strict** mode, except for apps you launched in the last 10 s) |
 
@@ -61,6 +63,8 @@ If an app keeps fighting back (12 grabs in 10 s), NoFocusSteal leaves it alone f
 **Does it work in games?** Yes. While you're pressing keys, a popup can't pull you out of a fullscreen game. For mouse-only games, use **Strict** mode.
 
 **My game minimizes or loses focus every time I click (Windows 11 24H2, `explorer.exe` / `MSCTFIME UI`).** That's a Windows bug where an invisible input-method window takes focus. NoFocusSteal recognises that window and sends focus straight back to your game, in every mode except *Log only* and *Off*.
+
+**Isn't X-Mouse / focus-follows-mouse the fix?** Tools like [X-Mouse Controls](https://github.com/joelpurra/xmouse-controls) make the window under your pointer active. That's great if you like that style, but it doesn't stop a popup from grabbing focus: your keystrokes still land in the popup until you move the mouse. X-Mouse is also a common *cause* of "my window randomly loses focus" when it's switched on by accident (Settings → Accessibility → Mouse → "Activate a window by hovering over it"). The two work together: with X-Mouse on, NoFocusSteal lets windows you point at take focus and blocks the rest.
 
 **An app runs as administrator and still steals focus.** Windows doesn't let a normal app take focus back from an elevated one. Run NoFocusSteal as administrator too (the log tells you when this happens).
 
