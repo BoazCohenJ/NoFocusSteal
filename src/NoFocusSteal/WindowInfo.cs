@@ -24,6 +24,10 @@ internal sealed class WindowInfo
         "TopLevelWindowForOverflowXamlIsland", "Windows.UI.Core.CoreWindow", "#32768",
     };
 
+    // Helper windows that exist only to host input-method UI. They should never be the foreground window,
+    // but a Windows 11 24H2 regression hands focus to explorer.exe's one after clicks, knocking games out.
+    private static readonly HashSet<string> BogusClasses = new(StringComparer.Ordinal) { "MSCTFIME UI", "IME" };
+
     public IntPtr Hwnd;
     public IntPtr RootOwner;
     public uint ProcessId;
@@ -37,6 +41,8 @@ internal sealed class WindowInfo
     public bool IsSystemUI =>
         SystemProcesses.Contains(ExeName)
         || (ExeName.Equals("explorer.exe", StringComparison.OrdinalIgnoreCase) && SystemExplorerClasses.Contains(ClassName));
+
+    public bool IsBogus => BogusClasses.Contains(ClassName);
 
     public string Describe() => string.IsNullOrEmpty(Title) ? $"[{ClassName}]" : Title;
 

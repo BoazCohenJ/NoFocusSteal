@@ -23,6 +23,7 @@ NoFocusSteal is a tiny tray app that puts focus back where you were typing the m
 - **Names the culprit.** Every focus change is logged with the app, window title, process ID and exe path. Invisible windows, the usual suspects behind "my window randomly loses focus", are flagged. Everything is also written to a CSV file, so you can leave it running overnight.
 - **Leaves your own actions alone.** Clicking, Alt+Tab, Win-key shortcuts, closing a window, dialogs of the app you're using and the Start menu all work normally.
 - **Four modes:** *Guard* (default: block only while you type), *Strict* (block anything you didn't ask for), *Log only* (just find the culprit) and *Off*.
+- **Fixes the Windows 11 24H2 "games lose focus on every click" bug.** It always sends focus back when explorer.exe's invisible `MSCTFIME UI` window grabs it.
 - **Per-app rules.** Right-click a row to always allow an app, or to block it even when you aren't typing.
 - **Built-in test.** Click **Test it** to watch a window try to steal focus and fail.
 - **Nothing injected.** No DLL injection and no API hooking of other programs, unlike older tools; see [how it works](#how-it-decides).
@@ -58,6 +59,8 @@ If an app keeps fighting back (12 grabs in 10 s), NoFocusSteal leaves it alone f
 **Which app is stealing my focus?** Run NoFocusSteal (the *Log only* mode works too) and wait for it to happen. Rows highlighted yellow or red are focus changes you didn't ask for. **Top suspect** in the status bar names the worst offender. Right-click → **Open file location** shows you exactly what it is.
 
 **Does it work in games?** Yes. While you're pressing keys, a popup can't pull you out of a fullscreen game. For mouse-only games, use **Strict** mode.
+
+**My game minimizes or loses focus every time I click (Windows 11 24H2, `explorer.exe` / `MSCTFIME UI`).** That's a Windows bug where an invisible input-method window takes focus. NoFocusSteal recognises that window and sends focus straight back to your game, in every mode except *Log only* and *Off*.
 
 **An app runs as administrator and still steals focus.** Windows doesn't let a normal app take focus back from an elevated one. Run NoFocusSteal as administrator too (the log tells you when this happens).
 

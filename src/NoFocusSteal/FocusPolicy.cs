@@ -44,6 +44,9 @@ public sealed class FocusSnapshot
     public bool PreviousGone;
     public bool SameProcess;
     public bool OwnerRelated;
+    /// <summary>The new foreground window is one that should never have focus, like the invisible input-method
+    /// window a Windows 11 24H2 bug hands focus to after every click.</summary>
+    public bool NextIsBogus;
 
     /// <summary>Most recent click, shortcut, Alt/Win/Tab/Enter/Esc press at or before the event, if any.</summary>
     public int? LastIntent;
@@ -91,6 +94,11 @@ public static class FocusPolicy
         if (s.PreviousGone) return Allow("previous window was closed or minimized");
         if (s.SameProcess) return Allow("same app");
         if (s.OwnerRelated) return Allow("dialog of the previous window");
+        if (s.NextIsBogus)
+        {
+            const string bogus = "an invisible input-method window grabbed focus (known Windows 11 bug)";
+            return o.Mode == ProtectionMode.LogOnly ? new Decision(Verdict.WouldBlock, bogus) : new Decision(Verdict.Blocked, bogus);
+        }
         if (s.Rule == AppRule.Allow) return Allow("app is on your allow list");
 
         // Typing only counts if it came after your last deliberate action: a click or Alt+Tab followed by
