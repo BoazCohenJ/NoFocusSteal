@@ -13,7 +13,7 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Test
         run: dotnet test tests/NoFocusSteal.Tests -c Release
@@ -30,7 +30,7 @@ jobs:
           "$hash  NoFocusSteal.exe" | Out-File -Encoding ascii dist/NoFocusSteal.exe.sha256
           Get-Content dist/NoFocusSteal.exe.sha256
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: NoFocusSteal
           path: dist/
