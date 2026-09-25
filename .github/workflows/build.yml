@@ -1,0 +1,45 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test
+        run: dotnet test tests/NoFocusSteal.Tests -c Release
+
+      - name: Build
+        run: dotnet build src/NoFocusSteal -c Release
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory dist | Out-Null
+          Copy-Item src/NoFocusSteal/bin/Release/net48/NoFocusSteal.exe dist/
+          $hash = (Get-FileHash dist/NoFocusSteal.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  NoFocusSteal.exe" | Out-File -Encoding ascii dist/NoFocusSteal.exe.sha256
+          Get-Content dist/NoFocusSteal.exe.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NoFocusSteal
+          path: dist/
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          gh release create "${{ github.ref_name }}" dist/NoFocusSteal.exe dist/NoFocusSteal.exe.sha256 `
+            --title "NoFocusSteal ${{ github.ref_name }}" --notes-file .github/release-notes.md

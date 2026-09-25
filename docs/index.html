@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NoFocusSteal: stop apps stealing focus on Windows</title>
+<meta name="description" content="Free, open-source Windows tray app that stops other apps from stealing focus while you type, and logs which app keeps doing it. No install, no DLL injection.">
+<link rel="icon" type="image/png" href="icon-64.png">
+<meta property="og:type" content="website">
+<meta property="og:title" content="NoFocusSteal: stop apps stealing focus on Windows">
+<meta property="og:description" content="A tiny free tray app that keeps focus where you're typing and names the app that tried to grab it.">
+<meta property="og:url" content="https://boazcohenj.github.io/NoFocusSteal/">
+<meta property="og:image" content="https://boazcohenj.github.io/NoFocusSteal/social.png">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+  :root {
+    --bg: #f6f7fb;
+    --surface: #ffffff;
+    --text: #151a2d;
+    --muted: #535b75;
+    --line: #e2e5ef;
+    --accent: #3b5bdb;
+    --accent-ink: #ffffff;
+    --accent-soft: #e7ecff;
+    --bad: #d6336c;
+    --bad-soft: #ffe3ea;
+    --warn-soft: #fff4cc;
+    --ok: #2b8a3e;
+    --code: #eef0f6;
+    --shadow: 0 1px 2px rgba(20, 26, 45, .06), 0 8px 24px rgba(20, 26, 45, .08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1220;
+      --surface: #181c2e;
+      --text: #e8eaf3;
+      --muted: #a3a9c2;
+      --line: #2a3050;
+      --accent: #6d8bff;
+      --accent-ink: #0f1220;
+      --accent-soft: #1f2748;
+      --bad: #ff6b93;
+      --bad-soft: #3a1e2b;
+      --warn-soft: #3a3319;
+      --ok: #69db7c;
+      --code: #22273d;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .35);
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 17px/1.6 "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+  }
+  a { color: var(--accent); }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
+  header.top { display: flex; align-items: center; justify-content: space-between; padding: 18px 0; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); text-decoration: none; }
+  .brand img { width: 30px; height: 30px; }
+  .top nav a { color: var(--muted); text-decoration: none; margin-left: 20px; font-size: 15px; }
+  .top nav a:hover { color: var(--text); }
+
+  .hero { display: grid; grid-template-columns: 1.05fr 1fr; gap: 48px; align-items: center; padding: 36px 0 56px; }
+  h1 { font-size: clamp(34px, 5vw, 52px); line-height: 1.08; letter-spacing: -.02em; margin: 0 0 18px; }
+  .lede { font-size: 19px; color: var(--muted); margin: 0 0 28px; max-width: 34em; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 13px 22px; border-radius: 10px; font-weight: 600; text-decoration: none; font-size: 16px;
+    border: 1px solid var(--line); color: var(--text); background: var(--surface);
+  }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); box-shadow: var(--shadow); }
+  .btn:hover { filter: brightness(1.06); }
+  .meta { margin-top: 16px; color: var(--muted); font-size: 14px; }
+
+  /* Animated demo: you type, a popup tries to jump in, gets sent back. */
+  .demo { position: relative; height: 320px; }
+  .win {
+    position: absolute; background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .win .bar { height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 12px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  .win .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+  .editor { inset: 0 40px 50px 0; }
+  .editor .body { padding: 18px 20px; font-size: 15px; }
+  .typed { display: inline-block; overflow: hidden; white-space: nowrap; vertical-align: bottom; border-right: 2px solid var(--accent); animation: type 8s steps(38) infinite; max-width: 100%; }
+  .popup { width: 230px; right: 0; bottom: 0; animation: pop 8s ease-in-out infinite; }
+  .popup .body { padding: 14px 16px; font-size: 14px; color: var(--muted); }
+  .badge {
+    position: absolute; right: 18px; bottom: 150px; background: var(--bad); color: #fff; font-weight: 700;
+    font-size: 13px; padding: 5px 10px; border-radius: 999px; opacity: 0; animation: badge 8s ease-in-out infinite;
+  }
+  .taskbar { position: absolute; left: 0; right: 40px; bottom: 0; height: 38px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); display: flex; gap: 8px; align-items: center; padding: 0 10px; }
+  .task { width: 26px; height: 22px; border-radius: 5px; background: var(--code); }
+  .task.flash { animation: flash 8s linear infinite; }
+  @keyframes type { 0% { width: 0 } 70% { width: 19.5em } 100% { width: 19.5em } }
+  @keyframes pop {
+    0%, 30% { transform: translateY(30px); opacity: 0; z-index: 1 }
+    36% { transform: translateY(-40px); opacity: 1; z-index: 3 }
+    44% { transform: translateY(-40px); opacity: 1; z-index: 3 }
+    52%, 100% { transform: translateY(30px) scale(.95); opacity: 0; z-index: 1 }
+  }
+  @keyframes badge { 0%, 38% { opacity: 0 } 42%, 60% { opacity: 1 } 68%, 100% { opacity: 0 } }
+  @keyframes flash { 0%, 44% { background: var(--code) } 48%, 56%, 64%, 72% { background: #f59f00 } 52%, 60%, 68%, 76%, 100% { background: var(--code) } }
+  @media (prefers-reduced-motion: reduce) {
+    .typed, .popup, .badge, .task.flash { animation: none; }
+    .typed { width: 19.5em; }
+    .popup { opacity: 0; }
+  }
+
+  section { padding: 56px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: 30px; letter-spacing: -.01em; margin: 0 0 10px; }
+  .sub { color: var(--muted); margin: 0 0 28px; max-width: 42em; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+  .card h3 { margin: 0 0 6px; font-size: 17px; }
+  .card p { margin: 0; color: var(--muted); font-size: 15px; }
+  .shot { width: 100%; border-radius: 10px; border: 1px solid var(--line); box-shadow: var(--shadow); display: block; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; font-size: 15px; }
+  th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  th { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); background: var(--code); }
+  .r-ok { color: var(--ok); font-weight: 600; white-space: nowrap; }
+  .r-bad { color: var(--bad); font-weight: 600; white-space: nowrap; }
+  .r-warn { font-weight: 600; white-space: nowrap; }
+  tr.bad td { background: var(--bad-soft); }
+  tr.warn td { background: var(--warn-soft); }
+
+  .modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .mode { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .mode b { display: block; margin-bottom: 4px; }
+  .mode span { color: var(--muted); font-size: 14px; }
+  .mode.default { border-color: var(--accent); background: var(--accent-soft); }
+
+  ol.steps { padding-left: 1.2em; margin: 0; }
+  ol.steps li { margin-bottom: 8px; }
+  code { background: var(--code); padding: 2px 6px; border-radius: 5px; font-size: .9em; font-family: Consolas, "Cascadia Mono", monospace; overflow-wrap: anywhere; }
+  details { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; margin-bottom: 10px; }
+  summary { cursor: pointer; font-weight: 600; }
+  details p { color: var(--muted); margin: 10px 0 0; }
+  blockquote { margin: 0; padding: 14px 18px; border-left: 4px solid var(--accent); background: var(--surface); border-radius: 0 10px 10px 0; color: var(--muted); }
+  ul.asks { padding-left: 1.2em; }
+  ul.asks li { margin-bottom: 6px; }
+  footer { padding: 36px 0 60px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
+
+  @media (max-width: 860px) {
+    .hero { grid-template-columns: 1fr; gap: 28px; padding-top: 12px; }
+    .grid { grid-template-columns: 1fr; }
+    .modes { grid-template-columns: 1fr 1fr; }
+    .top nav a:not(.gh) { display: none; }
+  }
+  @media (max-width: 480px) {
+    body { font-size: 16px; }
+    .wrap { padding: 0 16px; }
+    .modes { grid-template-columns: 1fr; }
+    .demo { height: 280px; }
+    .popup { width: 190px; }
+    th, td { padding: 10px 10px; }
+    .typed { animation: none; width: auto; white-space: normal; border-right: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="./"><img src="icon-64.png" alt="">NoFocusSteal</a>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="#faq">FAQ</a>
+      <a class="gh" href="https://github.com/BoazCohenJ/NoFocusSteal">GitHub</a>
+    </nav>
+  </header>
+
+  <div class="hero">
+    <div>
+      <h1>Stop apps from stealing focus on Windows.</h1>
+      <p class="lede">You're mid-sentence and a popup jumps in front, so your keystrokes land in the wrong window. NoFocusSteal puts focus straight back where you were typing, flashes the pushy app's taskbar button instead, and tells you exactly which app it was.</p>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/BoazCohenJ/NoFocusSteal/releases/latest/download/NoFocusSteal.exe">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+          Download for Windows
+        </a>
+        <a class="btn" href="https://github.com/BoazCohenJ/NoFocusSteal">View source</a>
+      </div>
+      <p class="meta">Free and open source (MIT) · Windows 10 &amp; 11 · one ~100 KB .exe · no installer</p>
+    </div>
+    <div class="demo" aria-hidden="true">
+      <div class="win editor">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span>&nbsp; Report.docx</div>
+        <div class="body"><span class="typed">Hi team, the numbers for Q3 look great</span></div>
+      </div>
+      <div class="win popup">
+        <div class="bar">Update available</div>
+        <div class="body">An update is ready. Install now?</div>
+      </div>
+      <div class="badge">Blocked</div>
+      <div class="taskbar"><span class="task"></span><span class="task"></span><span class="task flash"></span><span class="task"></span></div>
+    </div>
+  </div>
+</div>
+
+<section>
+  <div class="wrap">
+    <h2>What it does</h2>
+    <p class="sub">A small tray app that stays out of your way until something tries to jump in front of you.</p>
+    <div class="grid">
+      <div class="card"><h3>Blocks focus stealing</h3><p>If another app grabs focus while you're typing, focus returns to your window within a few dozen milliseconds. Your keystrokes stay where they belong.</p></div>
+      <div class="card"><h3>Names the culprit</h3><p>Every focus change is logged with the app, window, process ID and exe path, including invisible windows. Leave it running and check <b>Top suspect</b>.</p></div>
+      <div class="card"><h3>Leaves you alone</h3><p>Clicks, Alt+Tab, Win-key shortcuts, dialogs, the Start menu and closing windows all behave normally. It only steps in when nothing you did asked for the switch.</p></div>
+      <div class="card"><h3>Nothing injected</h3><p>No DLL injection and no API hooking of other programs. It uses the same public Win32 calls any app can use, all from its own process.</p></div>
+      <div class="card"><h3>Per-app rules</h3><p>Right-click an app in the log to always allow it, or to block it even when you aren't typing.</p></div>
+      <div class="card"><h3>Private</h3><p>It keeps the <i>time</i> of each keypress, never the key. It has no network code. The log is a local CSV file.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>The focus log</h2>
+    <p class="sub">Red rows were blocked. Yellow rows were focus changes nobody asked for; that's where mystery "my window keeps losing focus" culprits turn up.</p>
+    <img class="shot" src="screenshot-log.png" width="1016" height="369" alt="NoFocusSteal log window listing focus changes: Teams, an updater and a game launcher blocked while typing; OneDrive's invisible window flagged as unsolicited.">
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <h2>How it decides</h2>
+    <p class="sub">NoFocusSteal watches foreground changes and the <i>timing</i> of your keyboard and mouse input, then asks one question: did you ask for this?</p>
+    <table>
+      <thead><tr><th>Situation</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>You clicked, used Alt+Tab, Win, Enter, Esc or a shortcut, and haven't typed since</td><td class="r-ok">Allowed</td></tr>
+        <tr><td>The window you were in was closed, minimized or hidden</td><td class="r-ok">Allowed</td></tr>
+        <tr><td>Same app: a dialog, a new tab or a new window</td><td class="r-ok">Allowed</td></tr>
+        <tr><td>Start menu, search, Alt+Tab switcher, lock screen, UAC</td><td class="r-ok">Allowed</td></tr>
+        <tr class="bad"><td>Another app grabs focus within 1.5 s of your last keypress</td><td class="r-bad">Blocked: focus comes back, the app's button flashes</td></tr>
+        <tr class="warn"><td>Another app grabs focus while you're idle</td><td class="r-warn">Logged as unsolicited (blocked in Strict mode)</td></tr>
+      </tbody>
+    </table>
+    <p class="sub" style="margin-top:22px">Fake keypresses generated by software (the classic trick focus stealers use to get past Windows' own protection) are ignored, so apps can't sneak through.</p>
+
+    <h2 style="margin-top:36px">Four modes</h2>
+    <div class="modes">
+      <div class="mode default"><b>Guard (default)</b><span>Block focus stealing while you type.</span></div>
+      <div class="mode"><b>Strict</b><span>Block anything you didn't ask for. Apps you just launched may still come forward.</span></div>
+      <div class="mode"><b>Log only</b><span>Change nothing; just find out who's doing it.</span></div>
+      <div class="mode"><b>Off</b><span>Paused.</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Get started</h2>
+    <ol class="steps">
+      <li><a href="https://github.com/BoazCohenJ/NoFocusSteal/releases/latest/download/NoFocusSteal.exe">Download NoFocusSteal.exe</a> and run it. Nothing else to install.</li>
+      <li>It lives in the tray. Left-click the icon for the log; right-click for modes and <b>Start with Windows</b>.</li>
+      <li>Click <b>Test it</b> in the log window, start typing somewhere, and watch a test window fail to steal your focus.</li>
+    </ol>
+    <p class="sub" style="margin-top:16px">The exe isn't code-signed yet, so SmartScreen may warn you. Click <b>More info → Run anyway</b>, or <a href="https://github.com/BoazCohenJ/NoFocusSteal#build-from-source">build it yourself</a>. Releases are built by GitHub Actions from the public source and come with a SHA-256 checksum.</p>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <h2>FAQ</h2>
+    <details><summary>How do I find out which program is stealing focus?</summary><p>Run NoFocusSteal (Log only mode is enough) and carry on working. When it happens, look for yellow or red rows. <b>Top suspect</b> in the status bar names the worst offender, and right-click → Open file location shows the exact exe. Common culprits include updaters, chat apps, OEM helper utilities and background tasks that briefly open invisible windows.</p></details>
+    <details><summary>Does it work in fullscreen games?</summary><p>Yes. While you're pressing keys, popups can't pull you out. For games you play mostly with the mouse, switch to Strict mode.</p></details>
+    <details><summary>An app that runs as administrator still gets through.</summary><p>Windows won't let a normal app take focus back from an elevated one. Run NoFocusSteal as administrator too; the log tells you when this happens.</p></details>
+    <details><summary>Doesn't the ForegroundLockTimeout registry tweak fix this?</summary><p>Windows stopped honouring it reliably years ago, and apps that steal focus deliberately bypass it. That's why this question has come up for over a decade.</p></details>
+    <details><summary>I use Remote Desktop, Mouse Without Borders or an on-screen keyboard.</summary><p>Their input is generated by software, so NoFocusSteal ignores it by default. Add <code>trustInjectedInput=true</code> to <code>%APPDATA%\NoFocusSteal\settings.ini</code>.</p></details>
+    <details><summary>Is it safe? It watches my keyboard.</summary><p>It records <i>when</i> a key was pressed and whether it was typing or a shortcut, in memory only, never which key. There are no hooks, no injection and no network access. The source is short and public.</p></details>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Why this exists</h2>
+    <p class="sub">People have been asking for this since the Windows Vista days, and the answer kept being no:</p>
+    <blockquote>"This is not possible without extensive manipulation of Windows internals and you need to get over it." — accepted answer on Super User, 2009</blockquote>
+    <ul class="asks">
+      <li><a href="https://superuser.com/questions/18383/preventing-applications-from-stealing-focus">Preventing applications from stealing focus</a>, Super User, 130k+ views</li>
+      <li><a href="https://superuser.com/questions/709052/active-window-program-unexpectedly-loses-focus-in-windows-7">Active window unexpectedly loses focus</a>, Super User, 110k+ views</li>
+      <li><a href="https://github.com/microsoft/PowerToys/issues/65">Disable focus stealing</a>, PowerToys #65, open since 2019 with 200+ reactions</li>
+      <li><a href="https://learn.microsoft.com/en-us/answers/questions/2156085/how-to-prevent-focus-stealing">How to prevent focus stealing</a>, Microsoft Q&amp;A</li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">NoFocusSteal is free, open-source software under the MIT license · <a href="https://github.com/BoazCohenJ/NoFocusSteal">GitHub</a> · <a href="https://github.com/BoazCohenJ/NoFocusSteal/issues">Report a problem</a></div>
+</footer>
+</body>
+</html>
