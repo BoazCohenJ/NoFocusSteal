@@ -13,12 +13,13 @@ namespace NoFocusSteal;
 /// </summary>
 internal sealed class FocusMonitor : IDisposable
 {
-    // Wait this long before judging a focus change so that the click or keypress that caused it
-    // (delivered to us as a separate message) has been counted.
-    private const int SettleMs = 40;
-    // An app that is blocked this many times inside FightWindowMs is left alone for a while.
-    private const int FightLimit = 25;
-    private const int FightWindowMs = 10000;
+    // Input and focus events are stamped by a clock that ticks every ~16 ms, so allow that much slack
+    // when asking whether an input came before a focus change.
+    private const int ClockSlackMs = 20;
+    // An app that grabs focus back this fast is fighting us in a loop; leave it alone for a while rather
+    // than ping-pong. A window that grabs focus every second or two stays blocked.
+    private const int FightLimit = 20;
+    private const int FightWindowMs = 3000;
     private const int FightPauseMs = 60000;
 
     private readonly Settings _settings;
@@ -26,7 +27,7 @@ internal sealed class FocusMonitor : IDisposable
     private readonly InputTracker _input;
     private readonly Native.WinEventDelegate _callback;
     private readonly Queue<Pending> _pending = new();
-    private readonly Timer _timer = new() { Interval = SettleMs };
+    private bool _draining;
     private readonly Dictionary<string, List<int>> _recentBlocks = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _pausedUntil = new(StringComparer.OrdinalIgnoreCase);
     // When each kind of window last grabbed focus uninvited; those get no benefit of the doubt after your clicks.
@@ -53,7 +54,6 @@ internal sealed class FocusMonitor : IDisposable
         _log = log;
         _input = new InputTracker { TrustInjectedInput = settings.TrustInjectedInput };
         _callback = OnWinEvent;
-        _timer.Tick += (_, _) => Drain();
     }
 
     public event Action<LogEntry> Blocked;
@@ -87,17 +87,40 @@ internal sealed class FocusMonitor : IDisposable
                 EventTime = unchecked((int)time),
                 LastInputInfo = unchecked((int)lii.dwTime),
             });
-            if (!_timer.Enabled) _timer.Start();
         }
         catch (Exception ex)
         {
             Trace.WriteLine("NoFocusSteal: capture failed: " + ex);
         }
+        // Judge right away: every millisecond the thief keeps focus is a keystroke that may land in it.
+        // Pumping pending input can deliver further focus events re-entrantly; those just join the queue.
+        if (!_draining) Drain();
     }
 
     private void Drain()
     {
-        _timer.Stop();
+        _draining = true;
+        try
+        {
+            _input.ProcessPending();
+        }
+        finally
+        {
+            _draining = false;
+        }
+        _draining = true;
+        try
+        {
+            DrainQueue();
+        }
+        finally
+        {
+            _draining = false;
+        }
+    }
+
+    private void DrainQueue()
+    {
         while (_pending.Count > 0)
         {
             var p = _pending.Dequeue();
@@ -119,11 +142,10 @@ internal sealed class FocusMonitor : IDisposable
 
         // Input that Raw Input didn't report (touch, pen, some accessibility tools) still shows up in the
         // system-wide last-input time. Count it as a deliberate action rather than risk blocking the user.
-        if (FocusPolicy.Elapsed(p.LastInputInfo, _input.LastAnyInput) > 150 || !_input.HasAnyInput)
-        {
-            if (!_input.IsIgnoring && p.LastInputInfo != 0)
-                _input.AddIntent(p.LastInputInfo);
-        }
+        // Compare against input seen around that moment, not the latest input: mouse moves that arrive after
+        // the switch (for example once an administrator app loses focus) mustn't hide a click we never saw.
+        if (p.LastInputInfo != 0 && !_input.IsIgnoring && !_input.SawInputNear(p.LastInputInfo))
+            _input.AddIntent(p.LastInputInfo);
 
         PolicyOptions options = _settings.Policy;
         if (options.Mode == ProtectionMode.Off)
@@ -144,10 +166,11 @@ internal sealed class FocusMonitor : IDisposable
             SameProcess = prev != null && prev.ProcessId == next.ProcessId,
             OwnerRelated = prev != null && (next.RootOwner == prev.RootOwner || next.RootOwner == prev.Hwnd
                                             || prev.RootOwner == next.Hwnd),
-            LastIntent = Latest(_input.LastIntentAtOrBefore(unchecked(p.EventTime + SettleMs)),
-                _input.LastClickAtOrBefore(unchecked(p.EventTime + SettleMs), w => prev == null || !IsWindowOf(w, prev))),
+            LastIntent = Latest(_input.LastIntentAtOrBefore(unchecked(p.EventTime + ClockSlackMs)),
+                _input.LastClickAtOrBefore(unchecked(p.EventTime + ClockSlackMs), w => prev == null || !IsWindowOf(w, prev))),
             LastClickInPrevious = prev == null ? null
-                : _input.LastClickAtOrBefore(unchecked(p.EventTime + SettleMs), w => IsWindowOf(w, prev)),
+                : _input.LastClickAtOrBefore(unchecked(p.EventTime + ClockSlackMs), w => IsWindowOf(w, prev)),
+            InputHiddenFromUs = prev != null && prev.Elevated && !WindowInfo.SelfElevated,
             NextIsRepeatOffender = _lastMisbehaved.TryGetValue(BehaviorKey(next), out int misbehaved)
                                    && FocusPolicy.Elapsed(p.EventTime, misbehaved) <= OffenderMemoryMs,
             LastTyping = _input.LastTypingAtOrBefore(p.EventTime),
@@ -343,7 +366,6 @@ internal sealed class FocusMonitor : IDisposable
     {
         if (_hook != IntPtr.Zero) Native.UnhookWinEvent(_hook);
         _hook = IntPtr.Zero;
-        _timer.Dispose();
         _input.Dispose();
     }
 }

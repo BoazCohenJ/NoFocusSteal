@@ -46,6 +46,11 @@ internal sealed class InputTracker : NativeWindow, IDisposable
 
     /// <summary>Tick of the last raw input event of any kind, including mouse moves and injected input.</summary>
     public int LastAnyInput { get; private set; }
+
+    // Times of recent raw input of any kind (thinned to one per 10 ms), to tell whether the system's
+    // last-input time is input we saw or input that never reached us.
+    private readonly int[] _any = new int[64];
+    private int _anyCount, _anyNext;
     public bool HasAnyInput { get; private set; }
 
     private DateTime _ignoreUntilUtc = DateTime.MinValue;
@@ -54,6 +59,27 @@ internal sealed class InputTracker : NativeWindow, IDisposable
     public void IgnoreInputFor(int ms) => _ignoreUntilUtc = DateTime.UtcNow.AddMilliseconds(ms);
 
     public bool IsIgnoring => DateTime.UtcNow < _ignoreUntilUtc;
+
+    /// <summary>True if Raw Input reported something close to <paramref name="time"/>.</summary>
+    public bool SawInputNear(int time)
+    {
+        for (int i = 0; i < _anyCount; i++)
+        {
+            int d = FocusPolicy.Elapsed(_any[i], time);
+            if (d >= -150 && d <= 60) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Handle raw input that is already waiting in the queue. A focus change is judged the moment Windows
+    /// reports it, and the click or keypress that caused it is usually still queued at that point.
+    /// </summary>
+    public void ProcessPending()
+    {
+        while (Native.PeekMessage(out Native.MSG msg, Handle, Native.WM_INPUT, Native.WM_INPUT, Native.PM_REMOVE))
+            Native.DispatchMessage(ref msg);
+    }
 
     public int? LastIntentAtOrBefore(int time) => LatestAtOrBefore(_intents, _intentCount, time);
     public int? LastTypingAtOrBefore(int time) => LatestAtOrBefore(_typing, _typingCount, time);
@@ -109,6 +135,8 @@ internal sealed class InputTracker : NativeWindow, IDisposable
         IntPtr device = Marshal.ReadIntPtr(_buffer, 8);
         int data = (int)headerSize;
 
+        if (!HasAnyInput || FocusPolicy.Elapsed(time, LastAnyInput) >= 10)
+            Push(_any, ref _anyNext, ref _anyCount, time);
         LastAnyInput = time;
         HasAnyInput = true;
 
