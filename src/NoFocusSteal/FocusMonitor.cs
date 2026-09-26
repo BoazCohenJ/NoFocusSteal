@@ -29,8 +29,12 @@ internal sealed class FocusMonitor : IDisposable
     private readonly Timer _timer = new() { Interval = SettleMs };
     private readonly Dictionary<string, List<int>> _recentBlocks = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _pausedUntil = new(StringComparer.OrdinalIgnoreCase);
-    // When each app last grabbed focus uninvited; such apps get no benefit of the doubt after your clicks.
+    // When each kind of window last grabbed focus uninvited; those get no benefit of the doubt after your clicks.
     private readonly Dictionary<string, int> _lastMisbehaved = new(StringComparer.OrdinalIgnoreCase);
+    // The Windows 11 input-method bug fires on every click, so log it at most once a minute.
+    private const int BogusLogIntervalMs = 60000;
+    private int? _lastBogusLogged;
+    private int _bogusSinceLogged;
     private const int OffenderMemoryMs = 10 * 60 * 1000;
     private readonly uint _ownPid = (uint)Process.GetCurrentProcess().Id;
     private IntPtr _hook;
@@ -144,7 +148,7 @@ internal sealed class FocusMonitor : IDisposable
                 _input.LastClickAtOrBefore(unchecked(p.EventTime + SettleMs), w => prev == null || !IsWindowOf(w, prev))),
             LastClickInPrevious = prev == null ? null
                 : _input.LastClickAtOrBefore(unchecked(p.EventTime + SettleMs), w => IsWindowOf(w, prev)),
-            NextIsRepeatOffender = _lastMisbehaved.TryGetValue(next.ExeName, out int misbehaved)
+            NextIsRepeatOffender = _lastMisbehaved.TryGetValue(BehaviorKey(next), out int misbehaved)
                                    && FocusPolicy.Elapsed(p.EventTime, misbehaved) <= OffenderMemoryMs,
             LastTyping = _input.LastTypingAtOrBefore(p.EventTime),
             FollowsMouse = FollowsMouse(next, p.EventTime),
@@ -166,7 +170,7 @@ internal sealed class FocusMonitor : IDisposable
         if (decision.Verdict == Verdict.Blocked)
         {
             // Bogus windows don't fight back; they get focus once per click, so never back off from them.
-            if (!next.IsBogus && IsPaused(next.ExeName, p.EventTime))
+            if (!next.IsBogus && IsPaused(BehaviorKey(next), p.EventTime))
             {
                 entry.Verdict = Verdict.Unsolicited;
                 entry.Note = Join(entry.Note, "(not blocked: this app kept fighting back, paused for a minute)");
@@ -174,12 +178,19 @@ internal sealed class FocusMonitor : IDisposable
             }
             else
             {
-                bool fighting = !next.IsBogus && CountBlock(next.ExeName, p.EventTime);
+                bool fighting = !next.IsBogus && CountBlock(BehaviorKey(next), p.EventTime);
                 if (!TakeFocusBack(prev, next, out bool alreadyBack))
                 {
                     entry.Note = Join(entry.Note,
                         "(couldn't take focus back; if that app runs as administrator, run NoFocusSteal as administrator too)");
                     _tracked = next;
+                }
+                else if (alreadyBack && next.IsBogus)
+                {
+                    // Windows handed focus back before we could act: nothing was blocked, and the brief focus
+                    // loss (flicker, FPS dip in games) already happened. Say so rather than claim a block.
+                    entry.Verdict = Verdict.Unsolicited;
+                    entry.Note = Join(entry.Note, "(Windows gave focus back by itself; this bug can only be logged, not prevented)");
                 }
                 else if (alreadyBack)
                 {
@@ -195,7 +206,20 @@ internal sealed class FocusMonitor : IDisposable
             _tracked = next;
         }
 
-        if (entry.Verdict != Verdict.Allowed && !next.IsBogus) _lastMisbehaved[next.ExeName] = p.EventTime;
+        if (entry.Verdict != Verdict.Allowed && !next.IsBogus) _lastMisbehaved[BehaviorKey(next)] = p.EventTime;
+
+        if (next.IsBogus)
+        {
+            if (_lastBogusLogged.HasValue && FocusPolicy.Elapsed(p.EventTime, _lastBogusLogged.Value) < BogusLogIntervalMs)
+            {
+                _bogusSinceLogged++;
+                return;
+            }
+            if (_bogusSinceLogged > 0)
+                entry.Note = Join(entry.Note, $"(and {_bogusSinceLogged} more times in the previous minute or so)");
+            _lastBogusLogged = p.EventTime;
+            _bogusSinceLogged = 0;
+        }
 
         _log.Add(entry);
         if (entry.Verdict == Verdict.Blocked) Blocked?.Invoke(entry);
@@ -268,6 +292,12 @@ internal sealed class FocusMonitor : IDisposable
         Native.SetForegroundWindow(target);
         return Native.GetForegroundWindow() == target;
     }
+
+    /// <summary>
+    /// What "the same offender" means: the program plus its window class. Host processes such as explorer.exe
+    /// own unrelated windows (desktop, folders, copy dialogs), and one misbehaving shouldn't taint the rest.
+    /// </summary>
+    internal static string BehaviorKey(WindowInfo w) => w.ExeName + "|" + w.ClassName;
 
     private static bool IsWindowOf(IntPtr clickedRoot, WindowInfo window) =>
         clickedRoot != IntPtr.Zero && (clickedRoot == window.RootOwner || clickedRoot == window.Hwnd);
