@@ -257,6 +257,26 @@ public class FocusPolicyTests
         Assert.Equal(Verdict.Allowed, Decide(s).Verdict);
     }
 
+    // Issue #1 follow-up (WizTree): input sent to an administrator app is invisible to a normal process, so a
+    // switch away from one can't be judged. It must not be blocked or count against the other app.
+    [Fact]
+    public void SwitchAwayFromAdminAppIsAllowedWhenInputIsHidden()
+    {
+        var s = Steal(lastIntentAgo: 20000);
+        s.InputHiddenFromUs = true;
+        s.NextIsRepeatOffender = true;
+        Assert.Equal(Verdict.Allowed, Decide(s, ProtectionMode.Strict).Verdict);
+    }
+
+    [Fact]
+    public void ImeBugIsStillFlaggedWhenLeavingAnAdminApp()
+    {
+        var s = Steal(lastIntentAgo: 20);
+        s.InputHiddenFromUs = true;
+        s.NextIsBogus = true;
+        Assert.Equal(Verdict.Blocked, Decide(s).Verdict);
+    }
+
     [Fact]
     public void NoPreviousWindowIsAllowed()
     {

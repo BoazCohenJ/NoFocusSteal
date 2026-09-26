@@ -56,7 +56,9 @@ NoFocusSteal watches for foreground-window changes (`SetWinEventHook`) and watch
 
 To take focus back it uses the same public Win32 calls any app can use (`AttachThreadInput` plus `SetForegroundWindow`). No code runs inside other processes. Input that software generates (the classic `keybd_event(VK_MENU)` focus-stealing trick) is ignored by default, so apps can't fake a keypress to get past it.
 
-If an app keeps fighting back (25 grabs in 10 s), NoFocusSteal leaves it alone for a minute rather than loop forever.
+NoFocusSteal reacts to a focus change the moment Windows reports it, so a thief holds focus for only a few milliseconds. Because it reacts rather than prevents, a keystroke typed in exactly that instant can still land in the wrong window. Preventing the grab outright would need code injected into every other app, which NoFocusSteal deliberately avoids.
+
+If an app grabs focus back in a tight loop (20 times in 3 s), NoFocusSteal leaves it alone for a minute rather than ping-pong forever. Apps that grab focus every second or two stay blocked.
 
 ## FAQ
 
@@ -68,7 +70,7 @@ If an app keeps fighting back (25 grabs in 10 s), NoFocusSteal leaves it alone f
 
 **Isn't X-Mouse / focus-follows-mouse the fix?** Tools like [X-Mouse Controls](https://github.com/joelpurra/xmouse-controls) make the window under your pointer active. That's great if you like that style, but it doesn't stop a popup from grabbing focus: your keystrokes still land in the popup until you move the mouse. X-Mouse is also a common *cause* of "my window randomly loses focus" when it's switched on by accident (Settings → Accessibility → Mouse → "Activate a window by hovering over it"). The two work together: with X-Mouse on, NoFocusSteal lets windows you point at take focus and blocks the rest.
 
-**An app runs as administrator and still steals focus.** Windows doesn't let a normal app take focus back from an elevated one. Run NoFocusSteal as administrator too (the log tells you when this happens).
+**I use apps that run as administrator (WizTree, Task Manager, installers…).** Windows hides the clicks and keypresses that go to an administrator app from normal apps, and doesn't let a normal app take focus back from one. So while an administrator app has focus, NoFocusSteal lets switches away from it through instead of guessing, and it can't block an administrator app that steals focus. The log says when either happens. To cover these apps too, run NoFocusSteal as administrator (for example with a Task Scheduler task set to "Run with highest privileges" at log-on).
 
 **I use Remote Desktop, Mouse Without Borders, Synergy or an on-screen keyboard.** Their input is software-generated, so add `trustInjectedInput=true` to `%APPDATA%\NoFocusSteal\settings.ini`.
 

@@ -57,6 +57,9 @@ public sealed class FocusSnapshot
     /// <summary>Most recent click inside the window that is losing focus. That is working in it, like typing,
     /// though it can also open something (a link opening the browser).</summary>
     public int? LastClickInPrevious;
+    /// <summary>The window losing focus belongs to an administrator app and NoFocusSteal isn't one, so Windows
+    /// hid the clicks and keypresses that went to it (and may have hidden the one that caused this switch).</summary>
+    public bool InputHiddenFromUs;
     /// <summary>The app taking focus has grabbed focus uninvited within the last few minutes.</summary>
     public bool NextIsRepeatOffender;
     /// <summary>Most recent ordinary (typing) keypress at or before the event, if any.</summary>
@@ -109,6 +112,8 @@ public static class FocusPolicy
             return o.Mode == ProtectionMode.LogOnly ? new Decision(Verdict.WouldBlock, bogus) : new Decision(Verdict.Blocked, bogus);
         }
         if (s.Rule == AppRule.Allow) return Allow("app is on your allow list");
+        if (s.InputHiddenFromUs)
+            return Allow("an administrator app had focus, so your input there wasn't visible (run NoFocusSteal as administrator to cover it)");
         if (s.FollowsMouse) return Allow("focus follows your mouse (X-Mouse)");
 
         // Typing only counts if it came after your last deliberate action: a click or Alt+Tab followed by

@@ -90,6 +90,34 @@ internal static class Native
     [DllImport("user32.dll")]
     public static extern IntPtr WindowFromPoint(POINT point);
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MSG
+    {
+        public IntPtr hwnd;
+        public uint message;
+        public IntPtr wParam;
+        public IntPtr lParam;
+        public uint time;
+        public POINT pt;
+    }
+
+    public const uint PM_REMOVE = 0x0001;
+
+    [DllImport("user32.dll")]
+    public static extern bool PeekMessage(out MSG msg, IntPtr hwnd, uint filterMin, uint filterMax, uint remove);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr DispatchMessage(ref MSG msg);
+
+    public const uint TOKEN_QUERY = 0x0008;
+    public const int TokenElevation = 20;
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    public static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    public static extern bool GetTokenInformation(IntPtr token, int infoClass, out int info, int length, out int returned);
+
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
 

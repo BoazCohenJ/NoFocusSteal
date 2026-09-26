@@ -37,6 +37,8 @@ internal sealed class WindowInfo
     public string ClassName = "";
     public bool Visible;
     public int? ProcessStartTick;
+    /// <summary>The process runs as administrator (or higher), so a normal process can't see input sent to it.</summary>
+    public bool Elevated;
 
     public bool IsSystemUI =>
         SystemProcesses.Contains(ExeName)
@@ -73,6 +75,7 @@ internal sealed class WindowInfo
                     info.ExePath = sb.ToString();
                     info.ExeName = Path.GetFileName(info.ExePath);
                 }
+                info.Elevated = IsElevated(process);
                 if (Native.GetProcessTimes(process, out long creation, out _, out _, out _) && creation > 0)
                 {
                     double ageMs = (DateTime.UtcNow - DateTime.FromFileTimeUtc(creation)).TotalMilliseconds;
@@ -87,6 +90,22 @@ internal sealed class WindowInfo
         }
         if (info.ExeName.Length == 0) info.ExeName = info.ProcessId == 4 || info.ProcessId == 0 ? "System" : $"PID {info.ProcessId}";
         return info;
+    }
+
+    public static readonly bool SelfElevated = IsElevated(System.Diagnostics.Process.GetCurrentProcess().Handle);
+
+    private static bool IsElevated(IntPtr process)
+    {
+        // A token we aren't allowed to query belongs to a more privileged process, which is what matters here.
+        if (!Native.OpenProcessToken(process, Native.TOKEN_QUERY, out IntPtr token)) return true;
+        try
+        {
+            return Native.GetTokenInformation(token, Native.TokenElevation, out int elevated, sizeof(int), out _) && elevated != 0;
+        }
+        finally
+        {
+            Native.CloseHandle(token);
+        }
     }
 
     /// <summary>True if the window no longer exists, is hidden, minimized or cloaked (e.g. on another virtual desktop).</summary>
