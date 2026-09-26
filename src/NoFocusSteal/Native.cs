@@ -7,6 +7,7 @@ namespace NoFocusSteal;
 internal static class Native
 {
     public const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
+    public const uint EVENT_OBJECT_FOCUS = 0x8005;
     public const uint WINEVENT_OUTOFCONTEXT = 0x0000;
 
     public const int WM_INPUT = 0x00FF;

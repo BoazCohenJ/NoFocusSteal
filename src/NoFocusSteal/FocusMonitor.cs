@@ -28,6 +28,16 @@ internal sealed class FocusMonitor : IDisposable
     private readonly Native.WinEventDelegate _callback;
     private readonly Queue<Pending> _pending = new();
     private bool _draining;
+
+    // Windows doesn't always announce a foreground change. An app that steals by borrowing your window's input
+    // connection (AttachThreadInput) can take over with no EVENT_SYSTEM_FOREGROUND at all, or finish taking
+    // over after the announcement, when asking "who's in front?" still named your window. So also check the
+    // foreground window on every keyboard-focus change and about 60 times a second, and judge any change
+    // nobody announced like an announced one.
+    private readonly Timer _pollTimer = new() { Interval = 15 };
+    private readonly Native.WinEventDelegate _focusCallback;
+    private IntPtr _focusHook;
+    private IntPtr _lastSeenForeground;
     private readonly Dictionary<string, List<int>> _recentBlocks = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _pausedUntil = new(StringComparer.OrdinalIgnoreCase);
     // When each kind of window last grabbed focus uninvited; those get no benefit of the doubt after your clicks.
@@ -54,6 +64,8 @@ internal sealed class FocusMonitor : IDisposable
         _log = log;
         _input = new InputTracker { TrustInjectedInput = settings.TrustInjectedInput };
         _callback = OnWinEvent;
+        _focusCallback = (_, _, _, _, _, _, _) => CheckForeground();
+        _pollTimer.Tick += (_, _) => CheckForeground();
     }
 
     public event Action<LogEntry> Blocked;
@@ -70,6 +82,10 @@ internal sealed class FocusMonitor : IDisposable
         }
         _hook = Native.SetWinEventHook(Native.EVENT_SYSTEM_FOREGROUND, Native.EVENT_SYSTEM_FOREGROUND,
             IntPtr.Zero, _callback, 0, 0, Native.WINEVENT_OUTOFCONTEXT);
+        _focusHook = Native.SetWinEventHook(Native.EVENT_OBJECT_FOCUS, Native.EVENT_OBJECT_FOCUS,
+            IntPtr.Zero, _focusCallback, 0, 0, Native.WINEVENT_OUTOFCONTEXT);
+        _lastSeenForeground = fg;
+        _pollTimer.Start();
     }
 
     public void ApplySettings() => _input.TrustInjectedInput = _settings.TrustInjectedInput;
@@ -77,6 +93,20 @@ internal sealed class FocusMonitor : IDisposable
     private void OnWinEvent(IntPtr hook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint thread, uint time)
     {
         if (hwnd == IntPtr.Zero || idObject != 0) return;
+        Enqueue(hwnd, unchecked((int)time));
+    }
+
+    private void CheckForeground()
+    {
+        IntPtr fg = Native.GetForegroundWindow();
+        if (fg == IntPtr.Zero || fg == _lastSeenForeground) return;
+        _lastSeenForeground = fg;
+        if (_tracked != null && fg == _tracked.Hwnd) return;
+        Enqueue(fg, Environment.TickCount);
+    }
+
+    private void Enqueue(IntPtr hwnd, int time)
+    {
         try
         {
             var lii = new Native.LASTINPUTINFO { cbSize = (uint)Marshal.SizeOf(typeof(Native.LASTINPUTINFO)) };
@@ -84,7 +114,7 @@ internal sealed class FocusMonitor : IDisposable
             _pending.Enqueue(new Pending
             {
                 Window = WindowInfo.Capture(hwnd),
-                EventTime = unchecked((int)time),
+                EventTime = time,
                 LastInputInfo = unchecked((int)lii.dwTime),
             });
         }
@@ -204,9 +234,19 @@ internal sealed class FocusMonitor : IDisposable
                 bool fighting = !next.IsBogus && CountBlock(BehaviorKey(next), p.EventTime);
                 if (!TakeFocusBack(prev, next, out bool alreadyBack))
                 {
-                    entry.Note = Join(entry.Note,
-                        "(couldn't take focus back; if that app runs as administrator, run NoFocusSteal as administrator too)");
-                    _tracked = next;
+                    if (next.Elevated && !WindowInfo.SelfElevated)
+                    {
+                        // Windows doesn't let a normal app take focus from an administrator one; stop trying.
+                        entry.Note = Join(entry.Note,
+                            "(couldn't take focus back from an administrator app; run NoFocusSteal as administrator to cover it)");
+                        _tracked = next;
+                    }
+                    else
+                    {
+                        // Often the switch just hasn't registered yet. Keep your window as the one you're in and
+                        // look at the foreground again on the next check, which retries if the thief is still there.
+                        _lastSeenForeground = IntPtr.Zero;
+                    }
                 }
                 else if (alreadyBack && next.IsBogus)
                 {
@@ -214,10 +254,6 @@ internal sealed class FocusMonitor : IDisposable
                     // loss (flicker, FPS dip in games) already happened. Say so rather than claim a block.
                     entry.Verdict = Verdict.Unsolicited;
                     entry.Note = Join(entry.Note, "(Windows gave focus back by itself; this bug can only be logged, not prevented)");
-                }
-                else if (alreadyBack)
-                {
-                    entry.Note = Join(entry.Note, "(it gave focus back by itself)");
                 }
                 if (fighting)
                     entry.Note = Join(entry.Note, "(it keeps fighting back; leaving it alone for a minute)");
@@ -366,6 +402,9 @@ internal sealed class FocusMonitor : IDisposable
     {
         if (_hook != IntPtr.Zero) Native.UnhookWinEvent(_hook);
         _hook = IntPtr.Zero;
+        if (_focusHook != IntPtr.Zero) Native.UnhookWinEvent(_focusHook);
+        _focusHook = IntPtr.Zero;
+        _pollTimer.Dispose();
         _input.Dispose();
     }
 }
