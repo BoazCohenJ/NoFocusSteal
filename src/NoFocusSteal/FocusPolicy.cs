@@ -51,8 +51,14 @@ public sealed class FocusSnapshot
     /// and the new foreground window is the one under it.</summary>
     public bool FollowsMouse;
 
-    /// <summary>Most recent click, shortcut, Alt/Win/Tab/Enter/Esc press at or before the event, if any.</summary>
+    /// <summary>Most recent request to switch at or before the event: a click on some other window, the taskbar
+    /// or the desktop, a shortcut, or an Alt/Win/Tab/Enter/Esc press.</summary>
     public int? LastIntent;
+    /// <summary>Most recent click inside the window that is losing focus. That is working in it, like typing,
+    /// though it can also open something (a link opening the browser).</summary>
+    public int? LastClickInPrevious;
+    /// <summary>The app taking focus has grabbed focus uninvited within the last few minutes.</summary>
+    public bool NextIsRepeatOffender;
     /// <summary>Most recent ordinary (typing) keypress at or before the event, if any.</summary>
     public int? LastTyping;
     /// <summary>When the process that now owns the foreground window was started, if known.</summary>
@@ -111,16 +117,28 @@ public static class FocusPolicy
                       && Elapsed(s.EventTime, s.LastTyping.Value) <= o.TypingWindowMs
                       && (!s.LastIntent.HasValue || Elapsed(s.LastTyping.Value, s.LastIntent.Value) > 0);
 
+        // Same for clicks inside the window you're in: newer than your last switch request means you're working there.
+        bool clicking = s.LastClickInPrevious.HasValue
+                        && Elapsed(s.EventTime, s.LastClickInPrevious.Value) <= o.TypingWindowMs
+                        && (!s.LastIntent.HasValue || Elapsed(s.LastClickInPrevious.Value, s.LastIntent.Value) > 0);
+
         bool recentIntent = s.LastIntent.HasValue && Elapsed(s.EventTime, s.LastIntent.Value) <= o.IntentWindowMs;
 
-        bool launchedByYou = s.LastIntent.HasValue && s.NextProcessStart.HasValue
-                             && Elapsed(s.EventTime, s.LastIntent.Value) <= o.LaunchGraceMs
-                             && Elapsed(s.NextProcessStart.Value, s.LastIntent.Value) >= -1000;
+        bool launchedByYou = LaunchedAfter(s, s.LastIntent, o) || LaunchedAfter(s, s.LastClickInPrevious, o);
 
         string blockReason;
         if (typing)
         {
             blockReason = "took focus while you were typing";
+        }
+        else if (clicking)
+        {
+            if (LaunchedAfter(s, s.LastClickInPrevious, o)) return Allow("an app you just launched");
+            if (s.NextIsRepeatOffender) blockReason = "took focus right after you clicked in your window, and has grabbed focus before";
+            else if (s.Rule == AppRule.Block) blockReason = "app is on your block list";
+            else if (o.Mode == ProtectionMode.Strict) blockReason = "took focus right after you clicked in your window (strict mode)";
+            // A well-behaved app coming forward right after a click is usually something the click opened.
+            else return Allow("right after your click (it may have opened a link or file)");
         }
         else if (recentIntent)
         {
@@ -133,6 +151,11 @@ public static class FocusPolicy
         else if (s.Rule == AppRule.Block)
         {
             blockReason = "app is on your block list";
+        }
+        else if (s.NextIsRepeatOffender)
+        {
+            // One uninvited grab is let through while you're idle; an app that keeps doing it is not.
+            blockReason = "keeps grabbing focus uninvited";
         }
         else if (o.Mode == ProtectionMode.Strict)
         {
@@ -147,6 +170,13 @@ public static class FocusPolicy
             ? new Decision(Verdict.WouldBlock, blockReason)
             : new Decision(Verdict.Blocked, blockReason);
     }
+
+    /// <summary>The new window's process started no earlier than a second before <paramref name="action"/>,
+    /// and not too long ago: something that action launched.</summary>
+    private static bool LaunchedAfter(FocusSnapshot s, int? action, PolicyOptions o) =>
+        action.HasValue && s.NextProcessStart.HasValue
+        && Elapsed(s.EventTime, action.Value) <= o.LaunchGraceMs
+        && Elapsed(s.NextProcessStart.Value, action.Value) >= -1000;
 
     /// <summary>Milliseconds from <paramref name="earlier"/> to <paramref name="later"/>, safe across tick-count wraparound.</summary>
     public static int Elapsed(int later, int earlier) => unchecked(later - earlier);
