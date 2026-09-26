@@ -6,15 +6,16 @@ using System.Windows.Forms;
 namespace NoFocusSteal;
 
 /// <summary>
-/// "--steal-test N": waits N seconds, then forces a window into the foreground with the same tricks
-/// misbehaving apps use, so you can see NoFocusSteal block it. Runs as its own process on purpose.
+/// "--steal-test N [method] [repeatMs]": waits N seconds, then forces a window into the foreground with the
+/// same tricks misbehaving apps use, so you can see NoFocusSteal block it. With repeatMs it keeps grabbing
+/// focus every repeatMs milliseconds, like the worst offenders do. Runs as its own process on purpose.
 /// </summary>
 internal static class StealTest
 {
     [DllImport("user32.dll")]
     private static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
 
-    public static void Run(int delaySeconds, string method)
+    public static void Run(int delaySeconds, string method, int repeatMs = 0)
     {
         var form = new Form
         {
@@ -41,6 +42,12 @@ internal static class StealTest
             delay.Stop();
             form.Show();
             Steal(form.Handle, method);
+            if (repeatMs > 0)
+            {
+                var again = new Timer { Interval = Math.Max(100, repeatMs) };
+                again.Tick += (_, _) => Steal(form.Handle, method);
+                again.Start();
+            }
             var close = new Timer { Interval = 20000 };
             close.Tick += (_, _) => Application.Exit();
             close.Start();

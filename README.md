@@ -50,11 +50,13 @@ NoFocusSteal watches for foreground-window changes (`SetWinEventHook`) and watch
 | Start menu, search, Alt+Tab, lock screen, UAC | ✅ allowed |
 | X-Mouse is on and you just pointed at the window | ✅ allowed |
 | Another app grabs focus less than 1.5 s after you typed | ⛔ **blocked**: focus returns to your window and the app's taskbar button flashes |
-| Another app grabs focus while you're idle | ⚠️ *Unsolicited*: allowed and highlighted in the log (blocked in **Strict** mode, except for apps you launched in the last 10 s) |
+| Another app grabs focus less than 1.5 s after you clicked *inside* your window | ⛔ **blocked** if that app has grabbed focus uninvited before (or in **Strict** mode); otherwise allowed, since it's usually a link or file your click opened |
+| An app grabs focus while you're idle, for the first time | ⚠️ *Unsolicited*: allowed and highlighted in the log (blocked in **Strict** mode, except for apps you launched in the last 10 s) |
+| An app that already grabbed focus uninvited in the last 10 minutes does it again | ⛔ **blocked**, even while you're idle |
 
 To take focus back it uses the same public Win32 calls any app can use (`AttachThreadInput` plus `SetForegroundWindow`). No code runs inside other processes. Input that software generates (the classic `keybd_event(VK_MENU)` focus-stealing trick) is ignored by default, so apps can't fake a keypress to get past it.
 
-If an app keeps fighting back (12 grabs in 10 s), NoFocusSteal leaves it alone for a minute rather than loop forever.
+If an app keeps fighting back (25 grabs in 10 s), NoFocusSteal leaves it alone for a minute rather than loop forever.
 
 ## FAQ
 

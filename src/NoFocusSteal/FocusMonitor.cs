@@ -17,7 +17,7 @@ internal sealed class FocusMonitor : IDisposable
     // (delivered to us as a separate message) has been counted.
     private const int SettleMs = 40;
     // An app that is blocked this many times inside FightWindowMs is left alone for a while.
-    private const int FightLimit = 12;
+    private const int FightLimit = 25;
     private const int FightWindowMs = 10000;
     private const int FightPauseMs = 60000;
 
@@ -29,6 +29,9 @@ internal sealed class FocusMonitor : IDisposable
     private readonly Timer _timer = new() { Interval = SettleMs };
     private readonly Dictionary<string, List<int>> _recentBlocks = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _pausedUntil = new(StringComparer.OrdinalIgnoreCase);
+    // When each app last grabbed focus uninvited; such apps get no benefit of the doubt after your clicks.
+    private readonly Dictionary<string, int> _lastMisbehaved = new(StringComparer.OrdinalIgnoreCase);
+    private const int OffenderMemoryMs = 10 * 60 * 1000;
     private readonly uint _ownPid = (uint)Process.GetCurrentProcess().Id;
     private IntPtr _hook;
     private WindowInfo _tracked;
@@ -137,7 +140,12 @@ internal sealed class FocusMonitor : IDisposable
             SameProcess = prev != null && prev.ProcessId == next.ProcessId,
             OwnerRelated = prev != null && (next.RootOwner == prev.RootOwner || next.RootOwner == prev.Hwnd
                                             || prev.RootOwner == next.Hwnd),
-            LastIntent = _input.LastIntentAtOrBefore(unchecked(p.EventTime + SettleMs)),
+            LastIntent = Latest(_input.LastIntentAtOrBefore(unchecked(p.EventTime + SettleMs)),
+                _input.LastClickAtOrBefore(unchecked(p.EventTime + SettleMs), w => prev == null || !IsWindowOf(w, prev))),
+            LastClickInPrevious = prev == null ? null
+                : _input.LastClickAtOrBefore(unchecked(p.EventTime + SettleMs), w => IsWindowOf(w, prev)),
+            NextIsRepeatOffender = _lastMisbehaved.TryGetValue(next.ExeName, out int misbehaved)
+                                   && FocusPolicy.Elapsed(p.EventTime, misbehaved) <= OffenderMemoryMs,
             LastTyping = _input.LastTypingAtOrBefore(p.EventTime),
             FollowsMouse = FollowsMouse(next, p.EventTime),
             NextProcessStart = next.ProcessStartTick,
@@ -186,6 +194,8 @@ internal sealed class FocusMonitor : IDisposable
         {
             _tracked = next;
         }
+
+        if (entry.Verdict != Verdict.Allowed && !next.IsBogus) _lastMisbehaved[next.ExeName] = p.EventTime;
 
         _log.Add(entry);
         if (entry.Verdict == Verdict.Blocked) Blocked?.Invoke(entry);
@@ -257,6 +267,16 @@ internal sealed class FocusMonitor : IDisposable
         Native.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(Native.INPUT)));
         Native.SetForegroundWindow(target);
         return Native.GetForegroundWindow() == target;
+    }
+
+    private static bool IsWindowOf(IntPtr clickedRoot, WindowInfo window) =>
+        clickedRoot != IntPtr.Zero && (clickedRoot == window.RootOwner || clickedRoot == window.Hwnd);
+
+    private static int? Latest(int? a, int? b)
+    {
+        if (a == null) return b;
+        if (b == null) return a;
+        return FocusPolicy.Elapsed(a.Value, b.Value) >= 0 ? a : b;
     }
 
     private static void Flash(WindowInfo thief)

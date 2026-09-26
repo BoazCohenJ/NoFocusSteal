@@ -17,6 +17,9 @@ internal sealed class InputTracker : NativeWindow, IDisposable
     private readonly int[] _intents = new int[HistorySize];
     private readonly int[] _typing = new int[HistorySize];
     private readonly int[] _moves = new int[HistorySize];
+    private readonly int[] _clicks = new int[HistorySize];
+    private readonly IntPtr[] _clickWindows = new IntPtr[HistorySize];
+    private int _clickCount, _clickNext;
     private int _intentCount, _intentNext, _typingCount, _typingNext, _moveCount, _moveNext;
     private int _lastMoveRecorded;
     private bool _ctrl, _alt, _win;
@@ -55,6 +58,19 @@ internal sealed class InputTracker : NativeWindow, IDisposable
     public int? LastIntentAtOrBefore(int time) => LatestAtOrBefore(_intents, _intentCount, time);
     public int? LastTypingAtOrBefore(int time) => LatestAtOrBefore(_typing, _typingCount, time);
     public int? LastMouseMoveAtOrBefore(int time) => LatestAtOrBefore(_moves, _moveCount, time);
+
+    /// <summary>Latest click at or before <paramref name="time"/> whose top-level window satisfies <paramref name="where"/>.</summary>
+    public int? LastClickAtOrBefore(int time, Func<IntPtr, bool> where)
+    {
+        int? best = null;
+        for (int i = 0; i < _clickCount; i++)
+        {
+            int t = _clicks[i];
+            if (FocusPolicy.Elapsed(time, t) < 0 || !where(_clickWindows[i])) continue;
+            if (best == null || FocusPolicy.Elapsed(t, best.Value) > 0) best = t;
+        }
+        return best;
+    }
 
     /// <summary>Record input that happened but that Raw Input didn't report (touch, pen), as a deliberate action.</summary>
     public void AddIntent(int time) => Push(_intents, ref _intentNext, ref _intentCount, time);
@@ -111,7 +127,18 @@ internal sealed class InputTracker : NativeWindow, IDisposable
             // Left, right, middle, X1, X2 button-down flags.
             const ushort anyButtonDown = 0x0001 | 0x0004 | 0x0010 | 0x0040 | 0x0100;
             if ((buttonFlags & anyButtonDown) != 0)
-                Push(_intents, ref _intentNext, ref _intentCount, time);
+            {
+                // Remember which top-level window was clicked: clicking the window you're already in is working
+                // in it, clicking anything else is asking to switch. The monitor decides which once it knows.
+                IntPtr clicked = IntPtr.Zero;
+                if (Native.GetCursorPos(out Native.POINT cursor))
+                {
+                    IntPtr under = Native.WindowFromPoint(cursor);
+                    if (under != IntPtr.Zero) clicked = Native.GetAncestor(under, Native.GA_ROOTOWNER);
+                }
+                _clickWindows[_clickNext] = clicked;
+                Push(_clicks, ref _clickNext, ref _clickCount, time);
+            }
 
             // Pointer movement matters when Windows is set to activate the window under the mouse
             // (X-Mouse / "focus follows mouse"). Mice report hundreds of moves a second, so thin them out.

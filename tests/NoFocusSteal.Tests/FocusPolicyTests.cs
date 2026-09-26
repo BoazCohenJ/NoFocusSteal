@@ -175,6 +175,88 @@ public class FocusPolicyTests
         Assert.Equal(Verdict.Blocked, Decide(s).Verdict);
     }
 
+    // Issue #1: an app that keeps grabbing focus must not get through just because you clicked
+    // back into your own window a moment earlier.
+    [Fact]
+    public void RepeatOffenderIsBlockedRightAfterYouClickInYourWindow()
+    {
+        var s = Steal(lastIntentAgo: 5000);
+        s.LastClickInPrevious = Now - 400;
+        s.NextIsRepeatOffender = true;
+        Assert.Equal(Verdict.Blocked, Decide(s).Verdict);
+    }
+
+    [Fact]
+    public void WellBehavedAppMayFollowAClickInYourWindow()
+    {
+        // Clicking a link in a chat app brings the (already running) browser forward.
+        var s = Steal(lastIntentAgo: 5000);
+        s.LastClickInPrevious = Now - 400;
+        Assert.Equal(Verdict.Allowed, Decide(s).Verdict);
+    }
+
+    [Fact]
+    public void StrictBlocksAfterClickInYourWindow()
+    {
+        var s = Steal(lastIntentAgo: 5000);
+        s.LastClickInPrevious = Now - 400;
+        Assert.Equal(Verdict.Blocked, Decide(s, ProtectionMode.Strict).Verdict);
+    }
+
+    [Fact]
+    public void AppLaunchedByYourClickIsAllowedEvenIfItMisbehavedBefore()
+    {
+        var s = Steal(lastIntentAgo: 5000, processStartAgo: 900);
+        s.LastClickInPrevious = Now - 1000;
+        s.NextIsRepeatOffender = true;
+        Assert.Equal(Verdict.Allowed, Decide(s, ProtectionMode.Strict).Verdict);
+    }
+
+    [Fact]
+    public void ClickInYourWindowAfterAltTabCountsAsWorkingThere()
+    {
+        // Alt+Tab to your window, click in it, then the offender grabs focus: the click is newer.
+        var s = Steal(lastIntentAgo: 800);
+        s.LastClickInPrevious = Now - 300;
+        s.NextIsRepeatOffender = true;
+        Assert.Equal(Verdict.Blocked, Decide(s).Verdict);
+    }
+
+    [Fact]
+    public void SwitchRequestAfterClickInYourWindowIsHonoured()
+    {
+        // Clicked in your window, then Alt+Tabbed away: that's a request to switch.
+        var s = Steal(lastIntentAgo: 100);
+        s.LastClickInPrevious = Now - 600;
+        s.NextIsRepeatOffender = true;
+        Assert.Equal(Verdict.Allowed, Decide(s).Verdict);
+    }
+
+    [Fact]
+    public void FirstUninvitedGrabWhileIdleIsOnlyFlagged()
+    {
+        var s = Steal(lastIntentAgo: 20000);
+        s.LastClickInPrevious = Now - 5000;
+        Assert.Equal(Verdict.Unsolicited, Decide(s).Verdict);
+    }
+
+    [Fact]
+    public void RepeatOffenderIsBlockedEvenWhileIdle()
+    {
+        var s = Steal(lastIntentAgo: 20000);
+        s.LastClickInPrevious = Now - 5000;
+        s.NextIsRepeatOffender = true;
+        Assert.Equal(Verdict.Blocked, Decide(s).Verdict);
+    }
+
+    [Fact]
+    public void RepeatOffenderYouSwitchToYourselfIsAllowed()
+    {
+        var s = Steal(lastIntentAgo: 100);
+        s.NextIsRepeatOffender = true;
+        Assert.Equal(Verdict.Allowed, Decide(s).Verdict);
+    }
+
     [Fact]
     public void NoPreviousWindowIsAllowed()
     {

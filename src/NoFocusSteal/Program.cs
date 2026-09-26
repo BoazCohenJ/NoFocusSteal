@@ -21,7 +21,8 @@ internal static class Program
         {
             int delay = testIndex + 1 < args.Length && int.TryParse(args[testIndex + 1], out int d) ? d : 5;
             string method = testIndex + 2 < args.Length ? args[testIndex + 2].ToLowerInvariant() : "both";
-            StealTest.Run(delay, method);
+            int repeat = testIndex + 3 < args.Length && int.TryParse(args[testIndex + 3], out int r) ? r : 0;
+            StealTest.Run(delay, method, repeat);
             return 0;
         }
 
