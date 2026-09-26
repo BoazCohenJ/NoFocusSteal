@@ -56,7 +56,7 @@ NoFocusSteal watches for foreground-window changes (`SetWinEventHook`) and watch
 
 To take focus back it uses the same public Win32 calls any app can use (`AttachThreadInput` plus `SetForegroundWindow`). No code runs inside other processes. Input that software generates (the classic `keybd_event(VK_MENU)` focus-stealing trick) is ignored by default, so apps can't fake a keypress to get past it.
 
-NoFocusSteal reacts to a focus change the moment Windows reports it, so a thief holds focus for only a few milliseconds. Because it reacts rather than prevents, a keystroke typed in exactly that instant can still land in the wrong window. Preventing the grab outright would need code injected into every other app, which NoFocusSteal deliberately avoids.
+NoFocusSteal checks the foreground window the moment Windows reports a change, on every keyboard-focus change and about 60 times a second (some focus thieves take over without Windows announcing it). In testing against a window grabbing focus every 1.5 s, each grab lasted about 20 ms and 184–185 of 185 keystrokes landed in the right window. Because it reacts rather than prevents, a keystroke typed in exactly that instant can still land in the wrong window. Preventing the grab outright would need code injected into every other app, which NoFocusSteal deliberately avoids.
 
 If an app grabs focus back in a tight loop (20 times in 3 s), NoFocusSteal leaves it alone for a minute rather than ping-pong forever. Apps that grab focus every second or two stay blocked.
 
