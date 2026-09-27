@@ -27,7 +27,8 @@ jobs:
           New-Item -ItemType Directory dist | Out-Null
           Copy-Item src/NoFocusSteal/bin/Release/net48/NoFocusSteal.exe dist/
           $hash = (Get-FileHash dist/NoFocusSteal.exe -Algorithm SHA256).Hash.ToLower()
-          "$hash  NoFocusSteal.exe" | Out-File -Encoding ascii dist/NoFocusSteal.exe.sha256
+          # LF line ending so `sha256sum -c` works on Linux, macOS and Git Bash.
+          [IO.File]::WriteAllText("$PWD/dist/NoFocusSteal.exe.sha256", "$hash  NoFocusSteal.exe`n")
           Get-Content dist/NoFocusSteal.exe.sha256
 
       - uses: actions/upload-artifact@v7
