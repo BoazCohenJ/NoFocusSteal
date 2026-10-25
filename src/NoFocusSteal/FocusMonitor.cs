@@ -38,6 +38,7 @@ internal sealed class FocusMonitor : IDisposable
     private readonly Native.WinEventDelegate _focusCallback;
     private IntPtr _focusHook;
     private IntPtr _lastSeenForeground;
+    private readonly BurstCollapser _bursts = new();
     private readonly Dictionary<string, List<int>> _recentBlocks = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _pausedUntil = new(StringComparer.OrdinalIgnoreCase);
     // When each kind of window last grabbed focus uninvited; those get no benefit of the doubt after your clicks.
@@ -65,7 +66,11 @@ internal sealed class FocusMonitor : IDisposable
         _input = new InputTracker { TrustInjectedInput = settings.TrustInjectedInput };
         _callback = OnWinEvent;
         _focusCallback = (_, _, _, _, _, _, _) => CheckForeground();
-        _pollTimer.Tick += (_, _) => CheckForeground();
+        _pollTimer.Tick += (_, _) =>
+        {
+            CheckForeground();
+            foreach (var held in _bursts.Tick(Environment.TickCount)) _log.Add(held);
+        };
     }
 
     public event Action<LogEntry> Blocked;
@@ -280,7 +285,7 @@ internal sealed class FocusMonitor : IDisposable
             _bogusSinceLogged = 0;
         }
 
-        _log.Add(entry);
+        foreach (var ready in _bursts.Add(entry, BehaviorKey(next) + "|" + entry.Verdict, p.EventTime)) _log.Add(ready);
         if (entry.Verdict == Verdict.Blocked) Blocked?.Invoke(entry);
     }
 
@@ -405,6 +410,7 @@ internal sealed class FocusMonitor : IDisposable
         if (_focusHook != IntPtr.Zero) Native.UnhookWinEvent(_focusHook);
         _focusHook = IntPtr.Zero;
         _pollTimer.Dispose();
+        foreach (var held in _bursts.Flush()) _log.Add(held);
         _input.Dispose();
     }
 }
