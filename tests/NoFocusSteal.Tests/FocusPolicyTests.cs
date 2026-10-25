@@ -75,6 +75,23 @@ public class FocusPolicyTests
     }
 
     [Fact]
+    public void StrictBlocksLaunchedAppAfterYouClickedElsewhere()
+    {
+        // Clicked CurseForge's icon, then clicked into another app while it loaded; its window shows up 8 s later.
+        var s = Steal(lastIntentAgo: 8000, processStartAgo: 7800);
+        s.LastClickInPrevious = Now - 5000;
+        Assert.Equal(Verdict.Blocked, Decide(s, ProtectionMode.Strict).Verdict);
+    }
+
+    [Fact]
+    public void StrictStillAllowsLaunchedAppWhenYouDidNothingElse()
+    {
+        var s = Steal(lastIntentAgo: 8000, processStartAgo: 7800);
+        s.LastClickInPrevious = Now - 9000;
+        Assert.Equal(Verdict.Allowed, Decide(s, ProtectionMode.Strict).Verdict);
+    }
+
+    [Fact]
     public void StrictBlocksOldProcessLongAfterClick()
     {
         var s = Steal(lastIntentAgo: 4000, processStartAgo: 3_600_000);

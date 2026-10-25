@@ -129,7 +129,13 @@ public static class FocusPolicy
 
         bool recentIntent = s.LastIntent.HasValue && Elapsed(s.EventTime, s.LastIntent.Value) <= o.IntentWindowMs;
 
-        bool launchedByYou = LaunchedAfter(s, s.LastIntent, o) || LaunchedAfter(s, s.LastClickInPrevious, o);
+        // A launch request stops covering the app once you've moved on: clicking or typing in the window you
+        // switched to while it loaded means you chose to stay there (opened CurseForge, clicked elsewhere, then
+        // its window appeared and took focus back).
+        bool movedOn = s.LastIntent.HasValue
+                       && ((s.LastClickInPrevious.HasValue && Elapsed(s.LastClickInPrevious.Value, s.LastIntent.Value) > 0)
+                           || (s.LastTyping.HasValue && Elapsed(s.LastTyping.Value, s.LastIntent.Value) > 0));
+        bool launchedByYou = (!movedOn && LaunchedAfter(s, s.LastIntent, o)) || LaunchedAfter(s, s.LastClickInPrevious, o);
 
         string blockReason;
         if (typing)
