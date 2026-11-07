@@ -191,18 +191,29 @@ internal sealed class LogForm : Form
             return;
         }
         string exe = entry.Window.ExeName;
-        AppRule rule = _settings.RuleFor(exe);
-        _rowMenu.Items.Add(new ToolStripMenuItem($"Always allow {exe} to take focus", null,
-            (_, _) => SetRule(exe, AppRule.Allow)) { Checked = rule == AppRule.Allow });
-        _rowMenu.Items.Add(new ToolStripMenuItem($"Block {exe} even when I'm not typing", null,
-            (_, _) => SetRule(exe, AppRule.Block)) { Checked = rule == AppRule.Block });
-        if (rule != AppRule.Default)
-            _rowMenu.Items.Add($"Remove rule for {exe}", null, (_, _) => SetRule(exe, AppRule.Default));
+        AddRuleItems(exe, exe, exe);
+        string cls = entry.Window.ClassName;
+        if (cls.Length > 0)
+        {
+            _rowMenu.Items.Add(new ToolStripSeparator());
+            AddRuleItems(Settings.WindowKey(exe, cls), $"{exe} windows of type [{cls}]", $"{exe} [{cls}]");
+        }
         _rowMenu.Items.Add(new ToolStripSeparator());
         if (File.Exists(entry.Window.ExePath))
             _rowMenu.Items.Add("Open file location", null, (_, _) =>
                 Process.Start("explorer.exe", "/select,\"" + entry.Window.ExePath + "\""));
         _rowMenu.Items.Add("Copy details", null, (_, _) => Clipboard.SetText(Details(entry)));
+    }
+
+    private void AddRuleItems(string key, string what, string shortName)
+    {
+        AppRule rule = _settings.Rules.TryGetValue(key, out var r) ? r : AppRule.Default;
+        _rowMenu.Items.Add(new ToolStripMenuItem($"Always allow {what} to take focus", null,
+            (_, _) => SetRule(key, AppRule.Allow)) { Checked = rule == AppRule.Allow });
+        _rowMenu.Items.Add(new ToolStripMenuItem($"Block {what} even when I'm not typing", null,
+            (_, _) => SetRule(key, AppRule.Block)) { Checked = rule == AppRule.Block });
+        if (rule != AppRule.Default)
+            _rowMenu.Items.Add($"Remove rule for {shortName}", null, (_, _) => SetRule(key, AppRule.Default));
     }
 
     private void SetRule(string exe, AppRule rule)

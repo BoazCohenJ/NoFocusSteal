@@ -211,7 +211,7 @@ internal sealed class FocusMonitor : IDisposable
             LastTyping = _input.LastTypingAtOrBefore(p.EventTime),
             FollowsMouse = FollowsMouse(next, p.EventTime),
             NextProcessStart = next.ProcessStartTick,
-            Rule = _settings.RuleFor(next.ExeName),
+            Rule = _settings.RuleFor(next.ExeName, next.ClassName),
         };
 
         Decision decision = FocusPolicy.Decide(snapshot, options);

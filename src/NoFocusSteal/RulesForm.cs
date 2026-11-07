@@ -30,7 +30,7 @@ internal sealed class RulesForm : Form
             Height = 52,
             Padding = new Padding(8, 8, 8, 0),
             Text = "Allow: the app may always take focus.  Block: the app is stopped even when you're not typing.\r\n" +
-                   "Tip: right-click a row in the focus log to add a rule for that app.",
+                   "Tip: right-click a row in the focus log to add a rule for that app, or for just that kind of window (shown as app.exe|WindowClass).",
         };
 
         _list = new ListView { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true };
@@ -38,8 +38,8 @@ internal sealed class RulesForm : Form
         _list.Columns.Add("Rule", 120);
 
         var bottom = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, Padding = new Padding(8) };
-        _exe = new TextBox { Width = 180 };
-        bottom.Controls.Add(new Label { Text = "App (.exe):", AutoSize = true, Margin = new Padding(0, 6, 4, 0) });
+        _exe = new TextBox { Width = 200 };
+        bottom.Controls.Add(new Label { Text = "App (.exe) or app.exe|Class:", AutoSize = true, Margin = new Padding(0, 6, 4, 0) });
         bottom.Controls.Add(_exe);
         bottom.Controls.Add(Button("Allow", (_, _) => Add(AppRule.Allow)));
         bottom.Controls.Add(Button("Block", (_, _) => Add(AppRule.Block)));
@@ -70,7 +70,10 @@ internal sealed class RulesForm : Form
     {
         string exe = _exe.Text.Trim();
         if (exe.Length == 0) return;
-        if (!exe.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) exe += ".exe";
+        int bar = exe.IndexOf('|');
+        string app = bar < 0 ? exe : exe.Substring(0, bar).Trim();
+        if (!app.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) app += ".exe";
+        exe = bar < 0 ? app : Settings.WindowKey(app, exe.Substring(bar + 1).Trim());
         _settings.SetRule(exe, rule);
         _settings.Save();
         _exe.Clear();

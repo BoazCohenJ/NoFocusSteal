@@ -29,6 +29,13 @@ internal sealed class Settings
 
     public AppRule RuleFor(string exeName) => Rules.TryGetValue(exeName, out var r) ? r : AppRule.Default;
 
+    /// <summary>The key of a rule that covers one kind of window of an app: <c>exe|WindowClass</c>.</summary>
+    public static string WindowKey(string exeName, string className) => exeName + "|" + className;
+
+    /// <summary>A rule for this exact window class wins over the rule for the whole app.</summary>
+    public AppRule RuleFor(string exeName, string className) =>
+        className.Length > 0 && Rules.TryGetValue(WindowKey(exeName, className), out var r) ? r : RuleFor(exeName);
+
     public void SetRule(string exeName, AppRule rule)
     {
         if (rule == AppRule.Default) Rules.Remove(exeName);
@@ -112,6 +119,7 @@ internal sealed class Settings
                 "trustInjectedInput=" + (TrustInjectedInput ? "true" : "false"),
                 "",
                 "# Per-app rules: allow:<exe>=1 never blocks it, block:<exe>=1 blocks it even when you aren't typing.",
+                "# Per-window rules add the window class: allow:explorer.exe|Shell_TrayWnd=1 (a window rule beats the app rule).",
             };
             lines.AddRange(Rules.OrderBy(r => r.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(r => (r.Value == AppRule.Allow ? "allow:" : "block:") + r.Key + "=1"));

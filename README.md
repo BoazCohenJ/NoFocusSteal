@@ -25,7 +25,7 @@ NoFocusSteal is a tiny tray app that puts focus back where you were typing the m
 - **Four modes:** *Guard* (default: block only while you type), *Strict* (block anything you didn't ask for), *Log only* (just find the culprit) and *Off*.
 - **Recognises the Windows 11 "games lose focus on every click" bug.** When explorer.exe's invisible `MSCTFIME UI` window grabs focus, the log says so (once a minute, not on every click), so you know it's Windows and not another app. It can't prevent that bug; see the [FAQ](#faq).
 - **Works with focus-follows-mouse.** If you use X-Mouse (Windows' "activate a window by hovering over it", or [X-Mouse Controls](https://github.com/joelpurra/xmouse-controls)), pointing at a window still switches to it.
-- **Per-app rules.** Right-click a row to always allow an app, or to block it even when you aren't typing.
+- **Per-app and per-window rules.** Right-click a row to always allow an app, or to block it even when you aren't typing. Each row also offers the same for just that window type (e.g. only `explorer.exe`'s Start Menu or search window), so you don't have to allow a whole app.
 - **Built-in test.** Click **Test it** to watch a window try to steal focus and fail.
 - **Nothing injected.** No DLL injection and no API hooking of other programs, unlike older tools; see [how it works](#how-it-decides).
 - **One ~100 KB exe.** No installer and nothing to install: it runs on the .NET Framework 4.8 that already ships with Windows 10 and 11. MIT licensed.
