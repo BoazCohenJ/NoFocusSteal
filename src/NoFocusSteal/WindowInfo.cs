@@ -22,6 +22,7 @@ internal sealed class WindowInfo
         "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "TaskSwitcherWnd", "MultitaskingViewFrame",
         "XamlExplorerHostIslandWindow", "ForegroundStaging", "NotifyIconOverflowWindow",
         "TopLevelWindowForOverflowXamlIsland", "Windows.UI.Core.CoreWindow", "#32768",
+        "DV2ControlHost", // classic Start menu (also drawn by StartAllBack / StartIsBack)
     };
 
     // Helper windows that exist only to host input-method UI. They should never be the foreground window,
