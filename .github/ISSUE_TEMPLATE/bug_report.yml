@@ -1,0 +1,70 @@
+name: Bug report
+description: "Focus was stolen anyway, an action of yours was blocked, or the app misbehaves"
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time. Even a short report helps, and nothing here is too small.
+  - type: textarea
+    id: what
+    attributes:
+      label: "What happened?"
+      description: "What did you do, what did you expect, and what happened instead?"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: "Steps to reproduce"
+      placeholder: |
+        1. Type in Outlook
+        2. Teams pops up a notification
+        3. ...
+  - type: input
+    id: version
+    attributes:
+      label: "NoFocusSteal version"
+      description: "The release you downloaded"
+      placeholder: "1.4.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: "Mode"
+      options:
+        - "Guard"
+        - "Strict"
+        - "Log only"
+        - "Off"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: "Windows version"
+      description: "Press Win+R, type `winver`"
+      placeholder: "Windows 11 24H2 (build 26100)"
+  - type: input
+    id: apps
+    attributes:
+      label: "Apps involved"
+      description: "The app you were in and the one that took focus"
+      placeholder: "Typing in Word, OneDrive dialog took focus"
+  - type: textarea
+    id: focus-log-rows
+    attributes:
+      label: "Focus log rows"
+      description: "The matching rows from `%LOCALAPPDATA%\\NoFocusSteal\\focus-log.csv`. Remove any window titles you'd rather keep private."
+      render: text
+  - type: textarea
+    id: settings
+    attributes:
+      label: "Changed settings"
+      description: "Anything you changed in `%APPDATA%\\NoFocusSteal\\settings.ini`, such as `trustInjectedInput`"
+      render: ini
+  - type: textarea
+    id: extra
+    attributes:
+      label: "Anything else"
+      description: "Do you use Remote Desktop, Mouse Without Borders, an on-screen keyboard, or apps that run as administrator?"
